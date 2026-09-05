@@ -1,0 +1,20 @@
+/node_modules
+/.next
+/out
+/.venv
+/.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# 光度曲線から作った中間生成物。全体で数百 MB あり、
+# training/build_dataset.py で作り直せる(作り直しに 2.5 時間ほど)
+/data/views/
+/data/models/
+/data/cache/
+/logs/*.log
+
+# 配布物(public/tl/)は **追跡する**。原本は data/models/ 側にあるが、
+# Vercel のビルドが外部へ取りに出ないためには成果物がリポジトリに要る
+# (先例: manazashi-lab / kototoi-do)。ORT の wasm 14 MB もここに含む。
+__pycache__/
+*.pyc

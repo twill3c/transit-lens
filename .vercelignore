@@ -1,0 +1,20 @@
+# Vercel に送らないもの。
+#
+# **先頭の / を省くと、どの階層にも当たる**(.gitignore と同じ書式)。
+# `data` と書くと `src/lib/data.ts` まで当たってビルドが落ちる。
+#
+# ローカルの next build は .vercelignore を読まないので、
+# ここを間違えても手元では気づけない(HC-048)。**最初のデプロイの前に置く。**
+/node_modules
+/.next
+/out
+/.venv
+/.git
+/logs
+/tests
+/scripts
+/harness
+/training
+/data
+/.wt
+/.scaffold
