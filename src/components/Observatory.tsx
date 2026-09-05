@@ -107,6 +107,37 @@ export function Observatory() {
 
   const pick = useCallback((id: string) => setSelected(id), []);
 
+  // ギャラリーは **共有の時計に依らない**。分けておかないと、
+  // 位相が動くたびに 6 枚のカードとミニ曲線を作り直すことになる
+  const cards = useMemo(
+    () =>
+      (stars ?? []).map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          className="card"
+          aria-pressed={s.id === selected}
+          onClick={() => pick(s.id)}
+        >
+          <span className={`tag ${s.av === "PC" ? "p" : "f"}`}>
+            {s.av === "PC" ? "惑星候補" : "誤検出"}
+          </span>
+          <span className="nm">{s.name}</span>
+          <span className="sb">{s.sub}</span>
+          <svg viewBox="0 0 160 34" preserveAspectRatio="none" aria-hidden="true">
+            <path
+              d={sparkPath(s.lview)}
+              fill="none"
+              stroke={s.av === "PC" ? "var(--star)" : "var(--no)"}
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )),
+    [stars, selected, pick],
+  );
+
   if (!stars) {
     return <p className="loading">見本データを読み込んでいます…</p>;
   }
@@ -168,32 +199,7 @@ export function Observatory() {
           ミニ曲線は<b>その星の実データ</b>を前処理したもので、選ぶ前から違いが目に入る。
           誤検出の例を最初から混ぜてある —— 全部当たるギャラリーは何も教えない。
         </p>
-        <div className="gallery">
-          {stars.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className="card"
-              aria-pressed={s.id === selected}
-              onClick={() => pick(s.id)}
-            >
-              <span className={`tag ${s.av === "PC" ? "p" : "f"}`}>
-                {s.av === "PC" ? "惑星候補" : "誤検出"}
-              </span>
-              <span className="nm">{s.name}</span>
-              <span className="sb">{s.sub}</span>
-              <svg viewBox="0 0 160 34" preserveAspectRatio="none" aria-hidden="true">
-                <path
-                  d={sparkPath(s.lview)}
-                  fill="none"
-                  stroke={s.av === "PC" ? "var(--star)" : "var(--no)"}
-                  strokeWidth="1.4"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          ))}
-        </div>
+        <div className="gallery">{cards}</div>
         <div className="dice">
           <button
             type="button"

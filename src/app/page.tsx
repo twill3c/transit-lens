@@ -1,4 +1,5 @@
 import { Observatory } from "@/components/Observatory";
+import { DrawPad } from "@/components/DrawPad";
 import { Sandbox } from "@/components/Sandbox";
 import { Scorecard } from "@/components/Scorecard";
 import { ShapePair } from "@/components/ShapePair";
@@ -28,6 +29,7 @@ export default function Page() {
 
       <Observatory />
       <Sandbox />
+      <DrawPad />
       <ShapePair />
       <Threshold />
 

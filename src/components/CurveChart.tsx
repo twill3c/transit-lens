@@ -2,25 +2,23 @@
 
 import { useMemo } from "react";
 
-export type CurveMode = "local" | "global" | "raw";
-
 export type CurveChartProps = {
   /** 縦軸の値の列(ビュー、または生の相対フラックス) */
   values: number[] | Float64Array;
   /** 横軸の値の列。省略時は等間隔 */
   x?: number[] | Float64Array;
-  /** 横軸の目盛りに添える単位 */
+  /** 横軸に添える説明 */
   xUnit: string;
   /** 横軸の左端・右端の値 */
   xMin: number;
   xMax: number;
-  /** モデルの視線(values と同じ長さに引き伸ばした CAM)。null なら重ねない */
+  /** モデルの視線(CAM)。null なら重ねない */
   gaze: Float64Array | null;
   /** 点で描くか(生データ)、線で描くか(ビュー) */
   scatter?: boolean;
   yLabel: string;
   height?: number;
-  /** 通過の位置を示す縦線を引く位置(横軸の値)。null なら引かない */
+  /** 通過の位置を示す縦線。毎フレーム動く */
   markerX?: number | null;
 };
 
@@ -29,6 +27,14 @@ const L = 60;
 const R = 14;
 const T = 20;
 const B = 42;
+
+function formatTick(v: number): string {
+  const a = Math.abs(v);
+  if (a === 0) return "0";
+  if (a >= 100) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  return v.toFixed(2);
+}
 
 /**
  * 折りたたんだ曲線と「モデルの視線」を重ねる図。
@@ -51,6 +57,7 @@ export function CurveChart({
   markerX = null,
 }: CurveChartProps) {
   const H = height;
+
   const geom = useMemo(() => {
     const n = values.length;
     let lo = Infinity;
@@ -74,98 +81,92 @@ export function CurveChart({
     return { n, lo, hi, xs, X, Y };
   }, [values, x, xMin, xMax, H]);
 
-  const path = useMemo(() => {
-    if (scatter) return "";
-    let d = "";
-    for (let i = 0; i < geom.n; i++) {
-      const v = values[i];
-      if (!Number.isFinite(v)) continue;
-      d += `${d ? "L" : "M"}${geom.X(geom.xs(i)).toFixed(1)} ${geom.Y(v).toFixed(1)}`;
+  // 図の中身は**印の位置に依存しない**。印は毎フレーム動くので、分けておかないと
+  // 1,400 個の点を毎フレーム作り直すことになる
+  const body = useMemo(() => {
+    let path = "";
+    if (!scatter) {
+      for (let i = 0; i < geom.n; i++) {
+        const v = values[i];
+        if (!Number.isFinite(v)) continue;
+        path += `${path ? "L" : "M"}${geom.X(geom.xs(i)).toFixed(1)} ${geom.Y(v).toFixed(1)}`;
+      }
     }
-    return d;
-  }, [values, geom, scatter]);
 
-  const gazePath = useMemo(() => {
-    if (!gaze || gaze.length === 0) return "";
-    let max = 0;
-    for (const v of gaze) if (v > max) max = v;
-    if (!(max > 0)) return "";
-    const base = H - B;
-    const top = T + 4;
-    let d = `M${L} ${base}`;
-    for (let i = 0; i < gaze.length; i++) {
-      const u = i / (gaze.length - 1);
-      const px = L + u * (W - L - R);
-      const strength = Math.max(0, gaze[i]) / max;
-      d += `L${px.toFixed(1)} ${(base - strength * (base - top)).toFixed(1)}`;
+    let gazePath = "";
+    if (gaze && gaze.length > 1) {
+      let max = 0;
+      for (const v of gaze) if (v > max) max = v;
+      if (max > 0) {
+        const base = H - B;
+        const top = T + 4;
+        gazePath = `M${L} ${base}`;
+        for (let i = 0; i < gaze.length; i++) {
+          const px = L + (i / (gaze.length - 1)) * (W - L - R);
+          const strength = Math.max(0, gaze[i]) / max;
+          gazePath += `L${px.toFixed(1)} ${(base - strength * (base - top)).toFixed(1)}`;
+        }
+        gazePath += `L${W - R} ${base}Z`;
+      }
     }
-    d += `L${W - R} ${base}Z`;
-    return d;
-  }, [gaze, H]);
 
-  const ticks = [xMin, (xMin + xMax) / 2, xMax];
+    const ticks = [xMin, (xMin + xMax) / 2, xMax];
 
-  return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="光度曲線">
-      <defs>
-        <linearGradient id="gazeG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--gaze)" stopOpacity="0.30" />
-          <stop offset="100%" stopColor="var(--gaze)" stopOpacity="0.03" />
-        </linearGradient>
-      </defs>
+    return (
+      <>
+        <defs>
+          <linearGradient id="gazeG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--gaze)" stopOpacity="0.30" />
+            <stop offset="100%" stopColor="var(--gaze)" stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
 
-      {gazePath && <path d={gazePath} fill="url(#gazeG)" />}
-      {gazePath && (
+        {gazePath && <path d={gazePath} fill="url(#gazeG)" />}
+        {gazePath && (
+          <text
+            x={L + 6}
+            y={T + 11}
+            fill="var(--gaze)"
+            fontSize="10.5"
+            fontFamily="var(--f-mono)"
+            letterSpacing=".06em"
+          >
+            モデルの視線
+          </text>
+        )}
+
+        <line
+          x1={L}
+          y1={geom.Y(0)}
+          x2={W - R}
+          y2={geom.Y(0)}
+          stroke="var(--line)"
+          strokeWidth="1"
+        />
         <text
-          x={L + 6}
-          y={T + 11}
-          fill="var(--gaze)"
+          x={L - 9}
+          y={geom.Y(0) + 4}
+          fill="var(--ink-3)"
           fontSize="10.5"
+          textAnchor="end"
+          fontFamily="var(--f-mono)"
+        >
+          0
+        </text>
+        <text
+          x={L - 9}
+          y={T - 6}
+          fill="var(--ink-3)"
+          fontSize="10"
+          textAnchor="end"
           fontFamily="var(--f-mono)"
           letterSpacing=".06em"
         >
-          モデルの視線
+          {yLabel}
         </text>
-      )}
 
-      <line x1={L} y1={geom.Y(0)} x2={W - R} y2={geom.Y(0)} stroke="var(--line)" strokeWidth="1" />
-      <text
-        x={L - 9}
-        y={geom.Y(0) + 4}
-        fill="var(--ink-3)"
-        fontSize="10.5"
-        textAnchor="end"
-        fontFamily="var(--f-mono)"
-      >
-        0
-      </text>
-      <text
-        x={L - 9}
-        y={T - 6}
-        fill="var(--ink-3)"
-        fontSize="10"
-        textAnchor="end"
-        fontFamily="var(--f-mono)"
-        letterSpacing=".06em"
-      >
-        {yLabel}
-      </text>
-
-      {markerX !== null && markerX >= xMin && markerX <= xMax && (
-        <line
-          x1={geom.X(markerX)}
-          y1={T}
-          x2={geom.X(markerX)}
-          y2={H - B}
-          stroke="var(--gaze)"
-          strokeWidth="1.5"
-          strokeDasharray="3 3"
-          opacity="0.8"
-        />
-      )}
-
-      {scatter
-        ? Array.from({ length: geom.n }, (_, i) => {
+        {scatter ? (
+          Array.from({ length: geom.n }, (_, i) => {
             const v = values[i];
             if (!Number.isFinite(v)) return null;
             return (
@@ -179,48 +180,47 @@ export function CurveChart({
               />
             );
           })
-        : (
-            <path
-              d={path}
-              fill="none"
-              stroke="var(--star)"
-              strokeWidth="1.7"
-              strokeLinejoin="round"
-            />
-          )}
+        ) : (
+          <path d={path} fill="none" stroke="var(--star)" strokeWidth="1.7" strokeLinejoin="round" />
+        )}
 
-      {ticks.map((tv, i) => (
-        <g key={i}>
-          <line x1={geom.X(tv)} y1={H - B} x2={geom.X(tv)} y2={H - B + 4} stroke="var(--line)" />
-          <text
-            x={geom.X(tv)}
-            y={H - B + 18}
-            fill="var(--ink-3)"
-            fontSize="10.5"
-            textAnchor="middle"
-            fontFamily="var(--f-mono)"
-          >
-            {formatTick(tv)}
-          </text>
-        </g>
-      ))}
-      <text
-        x={(L + W - R) / 2}
-        y={H - 6}
-        fill="var(--ink-3)"
-        fontSize="10.5"
-        textAnchor="middle"
-      >
-        {xUnit}
-      </text>
+        {ticks.map((tv, i) => (
+          <g key={i}>
+            <line x1={geom.X(tv)} y1={H - B} x2={geom.X(tv)} y2={H - B + 4} stroke="var(--line)" />
+            <text
+              x={geom.X(tv)}
+              y={H - B + 18}
+              fill="var(--ink-3)"
+              fontSize="10.5"
+              textAnchor="middle"
+              fontFamily="var(--f-mono)"
+            >
+              {formatTick(tv)}
+            </text>
+          </g>
+        ))}
+        <text x={(L + W - R) / 2} y={H - 6} fill="var(--ink-3)" fontSize="10.5" textAnchor="middle">
+          {xUnit}
+        </text>
+      </>
+    );
+  }, [values, geom, gaze, scatter, yLabel, xUnit, xMin, xMax, H]);
+
+  return (
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="光度曲線">
+      {body}
+      {markerX !== null && markerX >= xMin && markerX <= xMax && (
+        <line
+          x1={geom.X(markerX)}
+          y1={T}
+          x2={geom.X(markerX)}
+          y2={H - B}
+          stroke="var(--gaze)"
+          strokeWidth="1.5"
+          strokeDasharray="3 3"
+          opacity="0.8"
+        />
+      )}
     </svg>
   );
-}
-
-function formatTick(v: number): string {
-  const a = Math.abs(v);
-  if (a === 0) return "0";
-  if (a >= 100) return v.toFixed(0);
-  if (a >= 10) return v.toFixed(1);
-  return v.toFixed(2);
 }

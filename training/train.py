@@ -130,7 +130,12 @@ def main() -> int:
     ap.add_argument("--width", type=float, default=1.0)
     ap.add_argument("--epochs", type=int, default=25)
     ap.add_argument("--batch", type=int, default=64)
+    # 学習率は実測で決めた(2026-09-05・部分データ 12,594 TCE・幅 0.5・3 epoch):
+    #   1e-4 → 検証 AUC 0.729 / 3e-4 → 0.821
+    # 参照実装は 1e-5 で 25,000 step 回すが、ここでは時間の都合で step 数を減らすので、
+    # 勾配クリップ(参照実装と同じ 1.0)を効かせたうえで学習率を上げている
     ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--clip", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=20260905)
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--shuffle-labels", action="store_true", help="陰性対照(G-04)")
@@ -199,6 +204,9 @@ def main() -> int:
             logit, _, _ = model(g_tr[idx], l_tr[idx])
             loss = loss_fn(logit, y_tr_t[idx])
             loss.backward()
+            # AstroNet の設定にある勾配クリップ(clip_gradient_norm: 1.0)。
+            # 正規化層を持たない深い畳み込みなので、これが無いと学習率を上げられない
+            nn.utils.clip_grad_norm_(model.parameters(), args.clip)
             opt.step()
             total += float(loss) * idx.numel()
         val = evaluate(model, g_va, l_va, y_va)
@@ -221,6 +229,7 @@ def main() -> int:
         "params": n_params,
         "epochs": args.epochs,
         "lr": args.lr,
+        "clip": args.clip,
         "batch": args.batch,
         "seed": args.seed,
         "shuffled_labels": args.shuffle_labels,

@@ -68,20 +68,23 @@ def story_for(rec: dict) -> str:
         bits.append(
             f"{period * 24:.1f} 時間で一周する。通過回数が多いぶん、弱い信号でも積み上げられる"
         )
-    elif np.isfinite(ntrans) and ntrans <= 6:
+    elif np.isfinite(ntrans) and 1 <= ntrans <= 8:
         bits.append(
             f"4 年の観測で {int(ntrans)} 回しか通らない。回数が足りないと、確信は上がりにくい"
         )
-    if np.isfinite(mes) and mes < 10:
+    if np.isfinite(mes) and mes < 12:
         bits.append(f"信号の強さは {mes:.1f}σ —— Kepler の検出線 7.1σ のすぐ上にある、際どい一件")
-    elif np.isfinite(mes) and mes > 100:
+    elif np.isfinite(mes) and mes > 200:
         bits.append(f"信号の強さは {mes:.0f}σ と圧倒的で、迷いようがない")
     if depth < 2e-4:
         bits.append(f"明るさの変化は {depth * 100:.4f}%。1 万分の 2 に満たない翳り")
+    elif np.isfinite(ntrans) and ntrans > 300:
+        bits.append(f"4 年で {int(ntrans)} 回も通るので、弱い窪みでも重ねれば形が出てくる")
 
     if not bits:
         bits.append(
-            f"周期 {period:.2f} 日、深さ {depth * 1e6:.0f} ppm。目立った癖のない一件"
+            f"周期 {period:.2f} 日、深さ {depth * 1e6:.0f} ppm。"
+            "教科書どおりの一件で、モデルも迷わない"
         )
     return "。".join(bits[:2]) + "。"
 
@@ -127,25 +130,55 @@ def choose_gallery(
         ]
     )
 
+    ntrans = data["ntrans"][test_idx]
     picks: list[int] = []
 
-    # 惑星候補: 通称つきを、周期の帯ごとに 1 件ずつ
-    pc = np.flatnonzero((av == "PC") & named)
-    bands = [(0, 2), (2, 15), (15, 60), (60, 1000)]
-    for lo, hi in bands:
+    # 台帳には物理的にありえない値が混ざる(深さ 232%・通過回数 0 など)。
+    # **ギャラリーは人が見る絵なので、ここで弾く。**弾いた理由は台帳の値であって
+    # モデルの出力ではないので、選び方に循環は入らない
+    sane = (
+        np.isfinite(depth)
+        & (depth > 5)
+        & (depth < 250000)
+        & np.isfinite(ntrans)
+        & (ntrans >= 3)
+        & np.isfinite(mes)
+    )
+
+    # 惑星候補: 通称つきを、周期の帯ごとに 1 件ずつ。
+    # **帯ごとに選び方を変える** —— 全部を「信号 30σ の教科書的な一件」にすると、
+    # 6 枚並べても同じ絵が 4 枚できるだけで、何も教えない
+    pc = np.flatnonzero((av == "PC") & named & sane)
+    bands: list[tuple[float, float, str]] = [
+        (0, 3, "strong"),  # 短周期・強い信号 = 迷いようのない一件
+        (3, 20, "median"),  # ふつうの一件
+        (20, 80, "marginal"),  # 検出線のすぐ上 = 際どい一件
+        (80, 10000, "fewest"),  # 通過回数が足りない一件
+    ]
+    for lo, hi, how in bands:
         cand = pc[(period[pc] >= lo) & (period[pc] < hi)]
         if cand.size == 0:
             continue
-        # 帯の中では、信号が強すぎず弱すぎないものを採る(絵として見やすい)
-        cand = cand[np.argsort(np.abs(np.log10(np.maximum(mes[cand], 1e-3)) - np.log10(30)))]
-        picks.append(int(cand[0]))
+        if how == "strong":
+            pick = cand[np.argmax(mes[cand])]
+        elif how == "median":
+            pick = cand[np.argsort(mes[cand])[cand.size // 2]]
+        elif how == "marginal":
+            eligible = cand[mes[cand] >= 7.1]
+            pick = (eligible if eligible.size else cand)[
+                np.argmin(mes[eligible if eligible.size else cand])
+            ]
+        else:
+            pick = cand[np.argmin(ntrans[cand])]
+        picks.append(int(pick))
 
-    # 誤検出: いちばん深いもの(食連星らしい)
-    fp_deep = np.flatnonzero(av != "PC")
+    # 誤検出 1: 食連星らしい深い窪み(天体由来 = AFP に限る)
+    fp_deep = np.flatnonzero((av == "AFP") & sane & (depth > 20000) & (ntrans >= 5))
     if fp_deep.size:
         picks.append(int(fp_deep[np.argmax(depth[fp_deep])]))
-    # 誤検出: 信号が弱く、モデルも低い点を付けたもの
-    fp_weak = np.flatnonzero((av == "NTP") & (mes < 12))
+
+    # 誤検出 2: 信号が弱く、モデルも低い点を付けたもの(器材由来 = NTP)
+    fp_weak = np.flatnonzero((av == "NTP") & sane & (mes >= 7) & (mes < 12) & (ntrans >= 20))
     if fp_weak.size:
         picks.append(int(fp_weak[np.argmin(scores[fp_weak])]))
 
