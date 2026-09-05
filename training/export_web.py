@@ -34,6 +34,17 @@ REFERENCE = {
 }
 
 
+def _nan_to_none(value):
+    """非有限値を None に置き換える(JSON に NaN / Infinity を出さないため)."""
+    if isinstance(value, dict):
+        return {k: _nan_to_none(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_nan_to_none(v) for v in value]
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
 def load_koi_names(path: pathlib.Path) -> dict[tuple[int, int], dict]:
     out: dict[tuple[int, int], dict] = {}
     if not path.exists():
@@ -319,8 +330,14 @@ def main() -> int:
         "eyeballs": extra.get("eyeballs", {}),
         "reference": REFERENCE,
     }
+    # **NaN を JSON に出してはならない。** Python の json.dumps は既定で `NaN` という
+    # 裸のリテラルを書くが、これは JSON の文法に無く JSON.parse が投げる。
+    # 画面側は catch して黙るので、**成績表が永久に「読み込んでいます」になる**
+    # —— ビルドもテストも緑のまま、画面だけが動かない(2026-09-06 に実際に踏んだ)。
+    # 未測定は null で表し、allow_nan=False で「黙って通る道」を塞ぐ。
     (out / "metrics.json").write_text(
-        json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(_nan_to_none(metrics), ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
     )
 
     for f in ("demo.json", "scores.json", "metrics.json", "model.onnx"):

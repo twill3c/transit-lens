@@ -5,7 +5,7 @@ import { CurveChart } from "./CurveChart";
 import { Gauge } from "./Gauge";
 import { fmtDepth, fmtHours, fmtPeriod, sizeWord } from "@/lib/format";
 import { KEPLER_MES_THRESHOLD } from "@/lib/physics";
-import { predict, upsample, type Prediction } from "@/lib/model";
+import { gazeBand, predict, type Prediction } from "@/lib/model";
 import { synthesize, type SynthResult } from "@/lib/synth";
 import { LOCAL_NUM_DURATIONS } from "@/lib/views";
 
@@ -66,7 +66,7 @@ export function Sandbox() {
   const halfWindowHours = synth
     ? Math.min(period / 2, synth.durationDays * LOCAL_NUM_DURATIONS) * 24
     : 1;
-  const gaze = pred && !busy ? upsample(pred.camLocal, synth?.localView.length ?? 201) : null;
+  const gaze = pred && !busy ? gazeBand(pred.camLocal, synth?.localView.length ?? 201) : null;
   const detected = pred ? pred.prob >= 0.5 : null;
 
   return (

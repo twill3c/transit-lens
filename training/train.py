@@ -140,6 +140,12 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--shuffle-labels", action="store_true", help="陰性対照(G-04)")
     ap.add_argument("--tag", default="")
+    ap.add_argument(
+        "--init-from",
+        default="",
+        help="この重みから学習を続ける。学習率を下げた二段目を回すときに使う。"
+        "**使ったら 3 本すべてに同じ二段目を回す**(G-05 の比較を同条件に保つため)",
+    )
     args = ap.parse_args()
 
     if args.threads:
@@ -175,6 +181,9 @@ def main() -> int:
         )
 
     model = TransitNet(head=args.head, width=args.width)
+    if args.init_from:
+        model.load_state_dict(torch.load(args.init_from, weights_only=True))
+        print(f"重みを {args.init_from} から引き継いだ", flush=True)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"頭部 {args.head} / 幅 {args.width} / パラメータ {n_params:,}", flush=True)
 
@@ -232,6 +241,7 @@ def main() -> int:
         "clip": args.clip,
         "batch": args.batch,
         "seed": args.seed,
+        "init_from": args.init_from,
         "shuffled_labels": args.shuffle_labels,
         "best_epoch": best["epoch"],
         "split_seed": SPLIT_SEED,

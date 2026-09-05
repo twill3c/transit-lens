@@ -177,6 +177,21 @@ def _crossing(curve: list[dict]) -> float | None:
 # --------------------------------------------------------------- 目玉 2
 
 
+def _window_share(
+    weight: np.ndarray, lo: int, hi: int, rng: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """行ごとに (窓内の割合, 巡回ずらし対照, 有効行) を返す."""
+    total = weight.sum(axis=1)
+    ok = total > 0
+    frac = np.zeros(weight.shape[0])
+    frac[ok] = weight[ok, lo:hi].sum(axis=1) / total[ok]
+    shifts = rng.integers(1, weight.shape[1], size=weight.shape[0])
+    rolled = np.stack([np.roll(w, int(s)) for w, s in zip(weight, shifts)])
+    ctrl = np.zeros(weight.shape[0])
+    ctrl[ok] = rolled[ok, lo:hi].sum(axis=1) / total[ok]
+    return frac, ctrl, ok
+
+
 def gaze_mass(
     model: TransitNet,
     gview: np.ndarray,
@@ -184,42 +199,78 @@ def gaze_mass(
     label: np.ndarray,
     rng_seed: int = 20260905,
 ) -> dict:
-    """視線の質量が通過窓(中心 ±1 継続時間)に落ちる割合.
+    """視線が通過窓(中心 ±1 継続時間)にどれだけ寄っているか.
 
-    local ビューの窓は ±4 継続時間なので、窓全体 201 ビンのうち通過窓は 1/4。
+    local ビューの窓は ±4 継続時間なので、201 ビンのうち通過窓は 1/4。
     **情報を持たない視線なら 0.25 になる。**
     対照は巡回ずらし —— 視線の形はそのままに、位置だけを壊す。
+
+    物差しは 2 つ出す。**順序が意味を持つので、両方を残す。**
+
+    * ``registered`` —— SPEC §7 に**測る前に**書いた物差し。正の寄与の質量が
+      窓に落ちる割合。「窪みの壁を見て惑星だと判断している」という予測に対応する
+    * ``posthoc`` —— 上が落ちた**後に**、実測(local 枝は正例 −1.26 / 負例 −8.01 と、
+      符号を問わず大きさで効いていた)を見てから足した物差し。
+      中央値からの隔たりの大きさ |cam − median| が窓に落ちる割合。
+      **結果を見てから足した物差しなので、これを合格の根拠にはしない**
     """
     probs, cam = run_model(model, gview, lview)
     half = 201 / 8.0  # 1 継続時間 = 201/8 ビン
-    centre = 100
-    lo = int(round(centre - half))
-    hi = int(round(centre + half)) + 1
+    lo = int(round(100 - half))
+    hi = int(round(100 + half)) + 1
+    called = (probs >= 0.5) & (label == 1)
 
-    pos = np.maximum(cam, 0.0)
-    total = pos.sum(axis=1)
-    ok = total > 0
-    frac = np.zeros(cam.shape[0])
-    frac[ok] = pos[ok, lo:hi].sum(axis=1) / total[ok]
-
-    rng = np.random.default_rng(rng_seed)
-    shifts = rng.integers(1, 201, size=cam.shape[0])
-    rolled = np.stack([np.roll(p, int(s)) for p, s in zip(pos, shifts)])
-    ctrl = np.zeros(cam.shape[0])
-    ctrl[ok] = rolled[ok, lo:hi].sum(axis=1) / total[ok]
-
-    called = (probs >= 0.5) & (label == 1) & ok
-    return {
+    out: dict = {
         "window_bins": [lo, hi - 1],
         "uninformative_baseline": (hi - lo) / 201,
         "n_positive_called": int(called.sum()),
-        "mean_in_window_positive": float(frac[called].mean()) if called.any() else None,
-        "median_in_window_positive": float(np.median(frac[called])) if called.any() else None,
-        "mean_in_window_control": float(ctrl[called].mean()) if called.any() else None,
-        "fraction_above_control": (
-            float((frac[called] > ctrl[called]).mean()) if called.any() else None
+    }
+
+    for key, weight in (
+        ("registered", np.maximum(cam, 0.0)),
+        ("posthoc", np.abs(cam - np.median(cam, axis=1, keepdims=True))),
+    ):
+        rng = np.random.default_rng(rng_seed)
+        frac, ctrl, ok = _window_share(weight, lo, hi, rng)
+        sel = called & ok
+        out[key] = {
+            "n": int(sel.sum()),
+            "mean_in_window": float(frac[sel].mean()) if sel.any() else None,
+            "median_in_window": float(np.median(frac[sel])) if sel.any() else None,
+            "mean_control": float(ctrl[sel].mean()) if sel.any() else None,
+            "fraction_above_control": (
+                float((frac[sel] > ctrl[sel]).mean()) if sel.any() else None
+            ),
+        }
+
+    # 枝ごとの寄与(どちらが判別を担っているか)。画面の説明の根拠になる
+    _, cam_g_raw = run_model(model, gview, lview)  # noqa: F841 — local だけを使う
+    with torch.no_grad():
+        g = torch.from_numpy(np.ascontiguousarray(gview, dtype=np.float32)).unsqueeze(1)
+        l = torch.from_numpy(np.ascontiguousarray(lview, dtype=np.float32)).unsqueeze(1)
+        parts_g, parts_l = [], []
+        for i in range(0, g.shape[0], 256):
+            _, cg, cl = model(g[i : i + 256], l[i : i + 256])
+            parts_g.append(cg.mean(dim=1).numpy())
+            parts_l.append(cl.mean(dim=1).numpy())
+    contrib_g = np.concatenate(parts_g)
+    contrib_l = np.concatenate(parts_l)
+    neg = (probs < 0.5) & (label == 0)
+    out["branch_contribution"] = {
+        "positive_called": {
+            "global": float(contrib_g[called].mean()) if called.any() else None,
+            "local": float(contrib_l[called].mean()) if called.any() else None,
+        },
+        "negative_called": {
+            "global": float(contrib_g[neg].mean()) if neg.any() else None,
+            "local": float(contrib_l[neg].mean()) if neg.any() else None,
+        },
+        "note": (
+            "local 枝は「惑星である証拠」ではなく「この窪みは怪しい」という減点として働く。"
+            "正例では減点が小さく、負例では大きい。符号ではなく大きさが判別を担っている"
         ),
     }
+    return out
 
 
 # ---------------------------------------------------------------- 本体

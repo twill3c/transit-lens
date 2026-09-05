@@ -93,22 +93,25 @@ export function CurveChart({
       }
     }
 
-    let gazePath = "";
+    // 視線は **中央値からの隔たり**([-1,1] に正規化済み)。符号で色を分ける。
+    // 上向き(藍)= 惑星である側へ、下向き(朱)= 惑星でない側へ動かした位置。
+    // 正の寄与だけを描くと、local 枝の「減点で効く」働き方がまったく見えない
+    let gazeUp = "";
+    let gazeDown = "";
     if (gaze && gaze.length > 1) {
-      let max = 0;
-      for (const v of gaze) if (v > max) max = v;
-      if (max > 0) {
-        const base = H - B;
-        const top = T + 4;
-        gazePath = `M${L} ${base}`;
-        for (let i = 0; i < gaze.length; i++) {
-          const px = L + (i / (gaze.length - 1)) * (W - L - R);
-          const strength = Math.max(0, gaze[i]) / max;
-          gazePath += `L${px.toFixed(1)} ${(base - strength * (base - top)).toFixed(1)}`;
-        }
-        gazePath += `L${W - R} ${base}Z`;
+      const base = H - B;
+      const span = (base - (T + 4)) * 0.62;
+      let up = `M${L} ${base}`;
+      let down = `M${L} ${base}`;
+      for (let i = 0; i < gaze.length; i++) {
+        const px = (L + (i / (gaze.length - 1)) * (W - L - R)).toFixed(1);
+        up += `L${px} ${(base - Math.max(0, gaze[i]) * span).toFixed(1)}`;
+        down += `L${px} ${(base + Math.max(0, -gaze[i]) * span * 0.42).toFixed(1)}`;
       }
+      gazeUp = `${up}L${W - R} ${base}Z`;
+      gazeDown = `${down}L${W - R} ${base}Z`;
     }
+    const gazePath = gazeUp;
 
     const ticks = [xMin, (xMin + xMax) / 2, xMax];
 
@@ -119,20 +122,38 @@ export function CurveChart({
             <stop offset="0%" stopColor="var(--gaze)" stopOpacity="0.30" />
             <stop offset="100%" stopColor="var(--gaze)" stopOpacity="0.03" />
           </linearGradient>
+          <linearGradient id="gazeD" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--no)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--no)" stopOpacity="0.03" />
+          </linearGradient>
         </defs>
 
+        {gazeDown && <path d={gazeDown} fill="url(#gazeD)" />}
         {gazePath && <path d={gazePath} fill="url(#gazeG)" />}
         {gazePath && (
-          <text
-            x={L + 6}
-            y={T + 11}
-            fill="var(--gaze)"
-            fontSize="10.5"
-            fontFamily="var(--f-mono)"
-            letterSpacing=".06em"
-          >
-            モデルの視線
-          </text>
+          <>
+            <text
+              x={L + 6}
+              y={T + 11}
+              fill="var(--gaze)"
+              fontSize="10.5"
+              fontFamily="var(--f-mono)"
+              letterSpacing=".06em"
+            >
+              モデルの視線 ▲惑星の側へ
+            </text>
+            <text
+              x={W - R - 6}
+              y={T + 11}
+              fill="var(--no)"
+              fontSize="10.5"
+              textAnchor="end"
+              fontFamily="var(--f-mono)"
+              letterSpacing=".06em"
+            >
+              ▼惑星でない側へ
+            </text>
+          </>
         )}
 
         <line

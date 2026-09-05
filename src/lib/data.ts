@@ -49,12 +49,12 @@ export type Metrics = {
     n: number;
     positives: number;
   };
-  /** 頭部の二択の実測(SPEC §6.1 / G-05) */
-  heads: { cam: number; astronet: number; delta: number; chosen: string };
+  /** 頭部の二択の実測(SPEC §6.1 / G-05)。未測定は null(NaN は JSON に出さない) */
+  heads: { cam: number | null; astronet: number | null; delta: number | null; chosen: string };
   /** 陰性対照(G-04) */
-  control_shuffled_auc: number;
+  control_shuffled_auc: number | null;
   /** 二実装照合(G-06) */
-  onnx_max_abs_diff: number;
+  onnx_max_abs_diff: number | null;
   reference: { name: string; auc: number; note: string };
 };
 

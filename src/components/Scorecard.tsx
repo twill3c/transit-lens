@@ -26,6 +26,11 @@ export function Scorecard() {
 
   if (!m) return <p className="loading">成績を読み込んでいます…</p>;
 
+  // 未測定は null で来る。**「0.000」と描いてはならない** —— 測っていないことと
+  // 測って 0 だったことは違う(metrics.json は NaN を出さず null にしている)
+  const num = (v: number | null | undefined, digits = 4) =>
+    typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : "未測定";
+
   return (
     <div className="grades">
       <div className="grade">
@@ -46,7 +51,7 @@ export function Scorecard() {
       </div>
       <div className="grade">
         <div className="k">陰性対照</div>
-        <div className="v">{m.control_shuffled_auc.toFixed(3)}</div>
+        <div className="v">{num(m.control_shuffled_auc, 3)}</div>
         <div className="n">
           ラベルを無作為に入れ替えて同じ学習を回したときの AUC。0.5 付近に落ちなければ、
           学習経路のどこかで答えが漏れている。
@@ -54,7 +59,11 @@ export function Scorecard() {
       </div>
       <div className="grade">
         <div className="k">二実装照合</div>
-        <div className="v">{m.onnx_max_abs_diff.toExponential(1)}</div>
+        <div className="v">
+          {typeof m.onnx_max_abs_diff === "number" && Number.isFinite(m.onnx_max_abs_diff)
+            ? m.onnx_max_abs_diff.toExponential(1)
+            : "未測定"}
+        </div>
         <div className="n">
           学習に使った PyTorch と、この画面が使う ONNX Runtime の出力の最大絶対差
           (保留集合の全件)。
@@ -64,8 +73,8 @@ export function Scorecard() {
         <div className="k">頭部の選定</div>
         <div className="v">{m.heads.chosen === "cam" ? "CAM 型" : "AstroNet 型"}</div>
         <div className="n">
-          視線が厳密に出る CAM 型で AUC {m.heads.cam.toFixed(4)}、published と同じ
-          AstroNet 型で {m.heads.astronet.toFixed(4)}。差は {m.heads.delta.toFixed(4)}。
+          視線が厳密に出る CAM 型で AUC {num(m.heads.cam)}、published と同じ
+          AstroNet 型で {num(m.heads.astronet)}。差は {num(m.heads.delta)}。
         </div>
       </div>
       <div className="grade">

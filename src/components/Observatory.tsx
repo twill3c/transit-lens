@@ -6,7 +6,7 @@ import { Gauge } from "./Gauge";
 import { SkyPanel } from "./SkyPanel";
 import type { DemoStar } from "@/lib/data";
 import { fmtDepth, fmtDepthPlain, fmtHours, fmtPeriod } from "@/lib/format";
-import { predict, upsample, type Prediction } from "@/lib/model";
+import { gazeBand, predict, type Prediction } from "@/lib/model";
 import { LOCAL_NUM_DURATIONS } from "@/lib/views";
 
 type View = "local" | "global" | "raw";
@@ -16,6 +16,54 @@ const SPLIT_WORD: Record<DemoStar["split"], string> = {
   val: "この TCE は検証に使った(学習には入れていない)",
   test: "この TCE は学習にも検証にも使っていない",
 };
+
+/**
+ * モデルとアーカイブが食い違ったとき、**その理由の見当**を台帳の値から出す。
+ *
+ * 食い違いを黙って「不一致」とだけ書くと、壊れた画面に見える。
+ * ここで見せているのは保留集合の 18%(再現率 82%)にあたる取りこぼしで、
+ * **それ自体がこの画面のいちばん面白いところ**である。
+ * 理由づけはモデルの出力ではなく台帳の値から出しているので、循環にはならない。
+ */
+function disagreementNote(star: DemoStar, prob: number): React.ReactNode | null {
+  const missedPlanet = star.av === "PC" && prob < 0.5;
+  const falseAlarm = star.av !== "PC" && prob >= 0.5;
+  if (!missedPlanet && !falseAlarm) return null;
+
+  if (missedPlanet && star.depthPpm > 3000) {
+    return (
+      <>
+        <b>なぜ落としたか:</b> 窪みが {(star.depthPpm / 1e4).toFixed(2)}% と深い。
+        学習に使った集合では、これだけ深い窪みの多くが食連星だった ——
+        モデルは<b>深さそのものを疑う癖</b>を持っている。ここではその癖が本物の惑星を落とした。
+        同じ癖が、隣の 24.3% の食連星を正しく捨てている。
+      </>
+    );
+  }
+  if (missedPlanet && Number.isFinite(star.ntrans) && star.ntrans <= 8) {
+    return (
+      <>
+        <b>なぜ落としたか:</b> 4 年で {Math.round(star.ntrans)} 回しか通っていない。
+        重ねられる回数が少ないほど窪みは雑音に埋もれる。
+        モデルは<b>形が定まらないもの</b>を信用しない。
+      </>
+    );
+  }
+  if (missedPlanet) {
+    return (
+      <>
+        <b>なぜ落としたか:</b> 台帳の値からは目立った理由が読めない。
+        保留集合の惑星候補のうち約 18% は、こうして落ちている。
+      </>
+    );
+  }
+  return (
+    <>
+      <b>なぜ拾ったか:</b> アーカイブは誤検出と判定しているが、モデルは惑星の形だと見た。
+      しきい値を上げれば消える —— いちばん下の「見逃しと空振りの取り引き」で確かめられる。
+    </>
+  );
+}
 
 function sparkPath(lview: number[], w = 160, h = 34): string {
   let lo = Infinity;
@@ -148,9 +196,9 @@ export function Observatory() {
   const gaze =
     gazeOn && pred
       ? view === "global"
-        ? upsample(pred.camGlobal, current?.gview.length ?? 2001)
+        ? gazeBand(pred.camGlobal, current?.gview.length ?? 2001)
         : view === "local"
-          ? upsample(pred.camLocal, current?.lview.length ?? 201)
+          ? gazeBand(pred.camLocal, current?.lview.length ?? 201)
           : null
       : null;
 
@@ -357,6 +405,11 @@ export function Observatory() {
             <span className={`stamp ${agree ? "ok" : "ng"}`}>{agree ? "一致" : "不一致"}</span>
           )}
         </div>
+        {current && pred && agree === false && (
+          <p className="plain" style={{ marginTop: 10, borderLeftColor: "var(--no)" }}>
+            {disagreementNote(current, pred.prob)}
+          </p>
+        )}
         {current && (
           <p className="foot" style={{ marginTop: 10, borderTop: "none", paddingTop: 0 }}>
             {SPLIT_WORD[current.split]}。KIC {current.kepid}・TCE {current.plnt}。
@@ -366,6 +419,10 @@ export function Observatory() {
                 視線はモデルの畳み込み枝の出力(global 枝で {pred.camGlobal.length} 点、
                 local 枝で {pred.camLocal.length} 点)を曲線の長さへ線形に引き伸ばして描いている。
                 ロジットはこの視線の平均に厳密に分解できる(近似ではない)。
+                描いてあるのは<b>枝の中央値からの隔たり</b>で、上向き(藍)が惑星の側、
+                下向き(朱)が惑星でない側。通過の拡大では下向きが目立つ ——
+                local 枝は「惑星である証拠」ではなく<b>「この窪みは怪しい」という減点</b>として
+                働いており、惑星ではその減点が小さい。
               </>
             )}
           </p>

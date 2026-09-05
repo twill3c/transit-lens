@@ -118,7 +118,7 @@ export async function predict(
 /**
  * 視線(CAM)を表示用の長さへ伸ばす。
  *
- * CAM は枝の出力長(global で 59、local で 48)しかないので、
+ * CAM は枝の出力長(global で 59、local で 46)しかないので、
  * 曲線に重ねるには入力長へ引き伸ばす必要がある。線形補間で伸ばし、
  * **「引き伸ばした」ことを画面にも書く**(G-09)。
  */
@@ -133,4 +133,34 @@ export function upsample(cam: Float32Array, length: number): Float64Array {
     out[i] = cam[a] + (cam[b] - cam[a]) * (u - a);
   }
   return out;
+}
+
+/**
+ * 表示用の視線 —— **中央値からの隔たり**を [-1, 1] に収めて返す。
+ *
+ * ロジットは `mean(cam) + …` なので、ある位置が判定を動かすのは
+ * **その位置が枝の平均からどれだけ離れているか**による。平らな CAM は
+ * 位置による差を持たない。だから描くべきは生の値ではなく中央値からの隔たりである。
+ *
+ * 符号は残す。実測(2026-09-06・保留集合の正例 335 件)では、
+ * local 枝は「惑星である証拠」ではなく**「この窪みは怪しい」という減点**として働き、
+ * 正例では減点が小さく(平均 −1.26)、負例では大きい(−8.01)。
+ * 正の寄与だけを描くと、この働き方はまったく見えない ——
+ * 実際、正の質量の 4.7% しか通過窓に落ちていなかった。
+ * 大きさで測り直すと 76.0% が通過窓に落ちる。
+ */
+export function gazeBand(cam: Float32Array, length: number): Float64Array {
+  const up = upsample(cam, length);
+  if (up.length === 0) return up;
+  const sorted = Float64Array.from(up).sort();
+  const n = sorted.length;
+  const median = n % 2 === 1 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  let max = 0;
+  for (let i = 0; i < up.length; i++) {
+    up[i] -= median;
+    const a = Math.abs(up[i]);
+    if (a > max) max = a;
+  }
+  if (max > 0) for (let i = 0; i < up.length; i++) up[i] /= max;
+  return up;
 }

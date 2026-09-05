@@ -73,6 +73,9 @@ page.on("pageerror", (e) => consoleErrors.push(String(e)));
 await page.goto(`${base}/`, { waitUntil: "networkidle" });
 
 // ---- T-201 ギャラリーと判定 -------------------------------------------------
+// networkidle の時点ではまだ demo.json の fetch が始まっていないことがある。
+// **数える前に出現を待つ**(待たずに数えて 0 枚で落ちた)
+await page.locator(".card").first().waitFor({ timeout: 60_000 }).catch(() => {});
 const cards = await page.locator(".card").count();
 check("T-201 ギャラリーのカードが並ぶ", cards >= 4, `${cards} 枚`);
 
@@ -137,11 +140,21 @@ console.log(`       参考: 周期を最短にすると ${smallVerdict} → ${sh
 
 // ---- しきい値 ---------------------------------------------------------------
 await page.locator("#dTh").scrollIntoViewIfNeeded();
-const tpBefore = await page.locator(".matrix .num").first().textContent();
+// セルの textContent には <small> の説明語が続く(「335見つけた」)。
+// **数だけを取り出す** —— Number("335見つけた") は NaN なので、比較が黙って偽になる
+const cell = async () => {
+  const t = (await page.locator(".matrix .num").first().textContent()) ?? "";
+  return Number((t.match(/^\s*(\d+)/) ?? [])[1] ?? Number.NaN);
+};
+const tpBefore = await cell();
 await page.locator("#dTh").fill("95");
 await page.waitForTimeout(400);
-const tpAfter = await page.locator(".matrix .num").first().textContent();
-check("T-201 しきい値を上げると見つけた数が減る", Number(tpAfter) < Number(tpBefore), `${tpBefore} → ${tpAfter}`);
+const tpAfter = await cell();
+check(
+  "T-201 しきい値を上げると見つけた数が減る",
+  Number.isFinite(tpBefore) && Number.isFinite(tpAfter) && tpAfter < tpBefore,
+  `${tpBefore} → ${tpAfter}`,
+);
 await page.screenshot({ path: join(SHOT_DIR, "04-threshold.png"), fullPage: false });
 
 // ---- 成績表 -----------------------------------------------------------------
