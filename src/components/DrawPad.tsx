@@ -101,13 +101,21 @@ export function DrawPad() {
   const lastIdx = useRef<number | null>(null);
   const seq = useRef(0);
 
+  // なぞっている最中に 71,400 点を畳み直すと、線が指に付いてこない。
+  // 描画は即時、組み立ては手を止めてから
+  const [applied, setApplied] = useState<number[]>(profile);
+  useEffect(() => {
+    const t = setTimeout(() => setApplied(profile), 140);
+    return () => clearTimeout(t);
+  }, [profile]);
+
   const built = useMemo(() => {
     try {
-      return buildViews(profile);
+      return buildViews(applied);
     } catch {
       return null;
     }
-  }, [profile]);
+  }, [applied]);
 
   useEffect(() => {
     if (!built) return;

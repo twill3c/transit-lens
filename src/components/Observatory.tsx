@@ -360,8 +360,14 @@ export function Observatory() {
         {current && (
           <p className="foot" style={{ marginTop: 10, borderTop: "none", paddingTop: 0 }}>
             {SPLIT_WORD[current.split]}。KIC {current.kepid}・TCE {current.plnt}。
-            視線はモデルの畳み込み枝の出力(global 枝で 59 点、local 枝で 48 点)を
-            曲線の長さへ線形に引き伸ばして描いている。
+            {pred && (
+              <>
+                {" "}
+                視線はモデルの畳み込み枝の出力(global 枝で {pred.camGlobal.length} 点、
+                local 枝で {pred.camLocal.length} 点)を曲線の長さへ線形に引き伸ばして描いている。
+                ロジットはこの視線の平均に厳密に分解できる(近似ではない)。
+              </>
+            )}
           </p>
         )}
       </section>

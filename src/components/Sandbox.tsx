@@ -21,9 +21,17 @@ export function Sandbox() {
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
 
-  const rp = logMap(rpDial, 0.5, 14);
-  const period = logMap(perDial, 0.4, 400);
-  const sigma = logMap(sigDial, 40e-6, 2200e-6);
+  // つまみの値と、実際に計算した値を分ける。曲線の生成は 71,400 点を畳むので
+  // 数十ミリ秒かかる —— ドラッグ中の入力ごとに走らせると、つまみが引っかかる
+  const [applied, setApplied] = useState({ rp: rpDial, per: perDial, sig: sigDial });
+  useEffect(() => {
+    const t = setTimeout(() => setApplied({ rp: rpDial, per: perDial, sig: sigDial }), 90);
+    return () => clearTimeout(t);
+  }, [rpDial, perDial, sigDial]);
+
+  const rp = logMap(applied.rp, 0.5, 14);
+  const period = logMap(applied.per, 0.4, 400);
+  const sigma = logMap(applied.sig, 40e-6, 2200e-6);
 
   const synth = useMemo<SynthResult | null>(() => {
     try {
