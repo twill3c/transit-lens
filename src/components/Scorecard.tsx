@@ -89,6 +89,19 @@ export function Scorecard() {
         </div>
       </div>
       <div className="grade">
+        <div className="k">学習の予算</div>
+        <div className="v">
+          {m.model.epochs}
+          <span style={{ fontSize: "15px", color: "var(--ink-3)" }}> epoch</span>
+        </div>
+        <div className="n">
+          フィルタ幅は published の <b>{m.model.width} 倍</b>、パラメータ{" "}
+          {m.model.params.toLocaleString("ja-JP")}。参照実装は 25,000 step
+          (この学習集合なら約 128 epoch 相当)まで回す。
+          <b>AUC の差はこの予算差を含んでいる。</b>
+        </div>
+      </div>
+      <div className="grade">
         <div className="k">学習に使った TCE</div>
         <div className="v">{m.counts.train.toLocaleString("ja-JP")}</div>
         <div className="n">

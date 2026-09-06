@@ -91,7 +91,9 @@ def check_onnx(model_dir: pathlib.Path, tag: str, gview: np.ndarray, lview: np.n
 # ------------------------------------------------------ G-04 の物差しの作り直し
 
 
-def class_separation(model_dir: pathlib.Path) -> dict:
+def class_separation(
+    model_dir: pathlib.Path, real_tag: str = "cam", shuffled_tag: str = "cam_shuffled"
+) -> dict:
     """陰性対照と本モデルの「クラスの離れ具合」を、出力そのもので測る.
 
     **AUC は退化した予測器に対して意味を持たない。** 実測(2026-09-06)では、
@@ -105,7 +107,7 @@ def class_separation(model_dir: pathlib.Path) -> dict:
     見る。これは定数予測器に対して素直に 0 に近づく。
     """
     out: dict = {}
-    for key, tag in (("real", "cam"), ("shuffled", "cam_shuffled")):
+    for key, tag in (("real", real_tag), ("shuffled", shuffled_tag)):
         path = model_dir / f"{tag}_scores.npz"
         if not path.exists():
             continue
@@ -316,6 +318,9 @@ def main() -> int:
     ap.add_argument("--views", default="data/views")
     ap.add_argument("--models", default="data/models")
     ap.add_argument("--tag", default="cam")
+    ap.add_argument("--cam-tag", default="", help="G-05 の CAM 型側(既定は --tag)")
+    ap.add_argument("--astronet-tag", default="astronet")
+    ap.add_argument("--shuffled-tag", default="cam_shuffled")
     ap.add_argument("--skip-eyeballs", action="store_true")
     args = ap.parse_args()
 
@@ -327,13 +332,20 @@ def main() -> int:
 
     out: dict = {}
 
-    # G-05 頭部の選定
+    # G-05 頭部の選定。**同じ幅・同じ epoch で回した対を指すこと**
+    cam_tag = args.cam_tag or args.tag
     reports = {}
-    for tag in ("cam", "astronet"):
+    for key, tag in (("cam", cam_tag), ("astronet", args.astronet_tag)):
         p = models / f"{tag}.json"
         if p.exists():
-            reports[tag] = json.loads(p.read_text(encoding="utf-8"))
+            reports[key] = json.loads(p.read_text(encoding="utf-8"))
     if "cam" in reports and "astronet" in reports:
+        a_cfg = (reports["cam"]["width"], reports["cam"]["epochs"])
+        b_cfg = (reports["astronet"]["width"], reports["astronet"]["epochs"])
+        if a_cfg != b_cfg:
+            raise SystemExit(
+                f"G-05 は同条件でしか比べられない: cam {a_cfg} 対 astronet {b_cfg}"
+            )
         a = reports["cam"]["test"]["auc"]
         b = reports["astronet"]["test"]["auc"]
         chosen = "cam" if (b - a) <= HEAD_DELTA_LIMIT else "astronet"
@@ -343,11 +355,11 @@ def main() -> int:
         print("G-05: astronet の報告がまだ無い(cam のみ)")
 
     # G-04 陰性対照
-    shuffled = models / "cam_shuffled.json"
+    shuffled = models / f"{args.shuffled_tag}.json"
     if shuffled.exists():
         out["control_shuffled_auc"] = json.loads(shuffled.read_text(encoding="utf-8"))["test"]["auc"]
         print(f"G-04 陰性対照 AUC: {out['control_shuffled_auc']:.4f}")
-        out["control_separation"] = class_separation(models)
+        out["control_separation"] = class_separation(models, cam_tag, args.shuffled_tag)
         cs = out["control_separation"]
         print(
             "G-04 クラス分離: 対照 {:.3f} SD(正例 {:.4f} / 負例 {:.4f}・出力の標準偏差 {:.5f})"

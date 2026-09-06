@@ -78,6 +78,15 @@ d("T-107 配布データ(G-07)", () => {
       expect(declaredUnmet, "G-04 が未測定なのに SPEC に未達の宣言が無い").toBe(true);
     }
 
+    // **published と AUC を並べるなら、予算も一緒に出す**(G-07)。
+    // 幅と epoch 数が入っていなければ、0.9679 対 0.988 は読めない数になる
+    expect(m.model.width).toBeGreaterThan(0);
+    expect(m.model.epochs).toBeGreaterThan(0);
+    expect(m.model.params).toBeGreaterThan(0);
+    const card = readFileSync("src/components/Scorecard.tsx", "utf-8");
+    expect(card).toContain("m.model.epochs");
+    expect(card).toContain("m.model.width");
+
     // G-05 頭部の選定
     expect(m.heads.cam).toBeGreaterThan(0.5);
     if (typeof m.heads.astronet === "number") {
