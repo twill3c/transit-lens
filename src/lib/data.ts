@@ -55,6 +55,19 @@ export type Metrics = {
   control_shuffled_auc: number | null;
   /** 二実装照合(G-06) */
   onnx_max_abs_diff: number | null;
+  /**
+   * 未学習モデルの試験 AUC(陰性対照の帰無)。
+   * **乱数の初期値だけで 0.72 が出る**ので、陰性対照の合否を 0.5 との近さでは決められない。
+   */
+  untrained_baseline?: {
+    aucs: number[];
+    mean: number;
+    min: number;
+    max: number;
+    seed?: number;
+    same_seed_as_runs?: number;
+    note?: string;
+  };
   reference: { name: string; auc: number; note: string };
 };
 

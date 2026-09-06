@@ -233,6 +233,16 @@ def main() -> int:
     chosen = choose_gallery(data, test_idx, scores, koi)
     print(f"ギャラリー {len(chosen)} 件を保留集合 {test_idx.size} 件から選んだ")
 
+    previous_raw: dict[str, tuple[list, list]] = {}
+    demo_path = out / "demo.json"
+    if demo_path.exists():
+        try:
+            for s in json.loads(demo_path.read_text(encoding="utf-8"))["stars"]:
+                if s.get("rawTime"):
+                    previous_raw[s["id"]] = (s["rawTime"], s["rawFlux"])
+        except (json.JSONDecodeError, KeyError):
+            pass
+
     stars = []
     for local_i in chosen:
         i = int(test_idx[local_i])
@@ -269,7 +279,10 @@ def main() -> int:
         rec["story"] = story_for(rec)
         del rec["depth_ppm"]
         if args.skip_raw:
-            rec["rawTime"], rec["rawFlux"] = [], []
+            # **既にある曲線を消さない。** --skip-raw は「取り直さない」であって
+            # 「捨てる」ではない。捨てる実装にしていたので、metrics だけ作り直した
+            # つもりで折りたたむ前の曲線が消えていた(2026-09-06 に二度やった)
+            rec["rawTime"], rec["rawFlux"] = previous_raw.get(rec["id"], ([], []))
         else:
             print(f"  KIC {kepid} の折りたたむ前の曲線を取得中…", flush=True)
             rec["rawTime"], rec["rawFlux"] = fetch_raw(
@@ -327,6 +340,7 @@ def main() -> int:
         "heads": extra.get("heads", {"cam": report["test"]["auc"], "astronet": float("nan"), "delta": float("nan"), "chosen": report["head"]}),
         "control_shuffled_auc": extra.get("control_shuffled_auc", float("nan")),
         "onnx_max_abs_diff": extra.get("onnx_max_abs_diff", float("nan")),
+        "untrained_baseline": extra.get("untrained_baseline", {}),
         "eyeballs": extra.get("eyeballs", {}),
         "reference": REFERENCE,
     }

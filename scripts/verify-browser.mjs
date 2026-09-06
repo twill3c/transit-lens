@@ -12,6 +12,10 @@ import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
 
+// TL_BASE を渡すと、ローカルの out/ ではなく**本番**を検品する。
+//   TL_BASE=https://transit-lens-one.vercel.app node scripts/verify-browser.mjs
+// 手元のビルドが通ることと、配られたものが動くことは別である。
+const REMOTE = process.env.TL_BASE ?? "";
 const ROOT = "out";
 const SHOT_DIR = "logs/browser";
 const PORT = 4173;
@@ -29,7 +33,7 @@ const MIME = {
   ".ico": "image/x-icon",
 };
 
-if (!existsSync(ROOT)) {
+if (!REMOTE && !existsSync(ROOT)) {
   console.error(`${ROOT}/ が無い。先に npm run build を走らせること`);
   process.exit(2);
 }
@@ -57,9 +61,9 @@ const check = (name, ok, detail = "") => {
   if (!ok) problems.push(`${name}${detail ? ": " + detail : ""}`);
 };
 
-await new Promise((r) => server.listen(PORT, r));
-const base = `http://127.0.0.1:${PORT}`;
-console.log(`配信中: ${base}\n`);
+if (!REMOTE) await new Promise((r) => server.listen(PORT, r));
+const base = REMOTE || `http://127.0.0.1:${PORT}`;
+console.log(`${REMOTE ? "本番を検品" : "配信中"}: ${base}\n`);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
@@ -103,7 +107,16 @@ await page.screenshot({ path: join(SHOT_DIR, "01-observatory.png"), fullPage: fa
 // 別の星を選ぶと判定が変わる(= 選択が効いている)
 const before = await page.locator(".gauge .val").first().textContent();
 await page.locator(".card").nth(cards - 1).click();
-await page.waitForTimeout(2500);
+await page
+  .waitForFunction(
+    (prev) => {
+      const v = document.querySelector(".gauge .val");
+      return v && /\d+%/.test(v.textContent ?? "") && v.textContent !== prev;
+    },
+    before,
+    { timeout: 60_000 },
+  )
+  .catch(() => {});
 const after = await page.locator(".gauge .val").first().textContent();
 check("T-201 星を替えると判定が変わる", before !== after, `${before} → ${after}`);
 await page.screenshot({ path: join(SHOT_DIR, "02-second-star.png"), fullPage: false });
@@ -120,10 +133,25 @@ await page.waitForFunction(
 );
 const bigVerdict = await page.locator(".gauge .val").nth(1).textContent();
 
+// 値が変わるまで**待つ**。固定の sleep だと、本番(モデル 677 KB + wasm 14 MB を
+// 取ってから推論)で再計算が間に合わず、初期値のまま比べて落ちた
+const waitForVerdictChange = async (index, before, timeout = 60_000) => {
+  await page
+    .waitForFunction(
+      ([i, prev]) => {
+        const v = document.querySelectorAll(".gauge .val")[i];
+        return v && /\d+%/.test(v.textContent ?? "") && v.textContent !== prev;
+      },
+      [index, before],
+      { timeout },
+    )
+    .catch(() => {});
+  return page.locator(".gauge .val").nth(index).textContent();
+};
+
 // 惑星を最小まで小さくする
 await page.locator("#dRp").fill("0");
-await page.waitForTimeout(3000);
-const smallVerdict = await page.locator(".gauge .val").nth(1).textContent();
+const smallVerdict = await waitForVerdictChange(1, bigVerdict);
 const smallPct = Number((smallVerdict ?? "0").replace("%", ""));
 check(
   "T-202 惑星を最小にすると判定が下がる",
@@ -134,8 +162,7 @@ await page.screenshot({ path: join(SHOT_DIR, "03-sandbox.png"), fullPage: false 
 
 // 周期を最短にすると拾い直せることがある(通過回数が増える)
 await page.locator("#dP").fill("0");
-await page.waitForTimeout(3000);
-const shortVerdict = await page.locator(".gauge .val").nth(1).textContent();
+const shortVerdict = await waitForVerdictChange(1, smallVerdict);
 console.log(`       参考: 周期を最短にすると ${smallVerdict} → ${shortVerdict}`);
 
 // ---- しきい値 ---------------------------------------------------------------
@@ -188,7 +215,7 @@ check(
 );
 
 await browser.close();
-server.close();
+if (!REMOTE) server.close();
 
 console.log(`\nスクリーンショット → ${SHOT_DIR}/`);
 if (problems.length) {

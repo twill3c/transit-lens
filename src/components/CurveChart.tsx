@@ -174,12 +174,15 @@ export function CurveChart({
         >
           0
         </text>
+        {/* 縦軸のラベルは**左端から**書く。end 揃えで x=L−9 に置くと、
+            日本語 10 文字ぶんが viewBox の外へ出て切れる(実ブラウザの絵で発見)。
+            代理指標では捕まらない —— 検査は全部緑のままだった */}
         <text
-          x={L - 9}
+          x={4}
           y={T - 6}
           fill="var(--ink-3)"
           fontSize="10"
-          textAnchor="end"
+          textAnchor="start"
           fontFamily="var(--f-mono)"
           letterSpacing=".06em"
         >

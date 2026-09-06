@@ -5,7 +5,9 @@ NASA Kepler 宇宙望遠鏡が 4 年間測り続けた恒星の明るさから�
 
 推論はすべてブラウザの中で走る(onnxruntime-web)。サーバ側の計算・cron・DB を持たない。
 
-- 本番: https://transit-lens.vercel.app/ (デプロイ後に確定)
+- 本番: **https://transit-lens-one.vercel.app/**
+  (`transit-lens.vercel.app` は別人の既存プロジェクトが取得済みで、Vercel が
+  `-one` 付きの別名を割り当てた。**`vercel alias ls` で実物を確かめてから書くこと**)
 - 仕様: [SPEC.md](SPEC.md) / 検査: [TEST_SPEC.md](TEST_SPEC.md)
 
 ## この画面でできること

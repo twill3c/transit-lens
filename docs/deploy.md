@@ -32,10 +32,19 @@ ORT の wasm は**リポジトリに入れる**(`.gitignore` に入れない)。
 ## Vercel
 
 ```bash
-gh repo create twill3c/transit-lens --public --source . --remote origin --push
+gh repo create twill3c/transit-lens --public
+git remote add origin https://github.com/twill3c/transit-lens.git
+git push -u origin main
 vercel link --project transit-lens --yes
-vercel --prod
+vercel --prod --yes
+vercel alias ls | grep transit    # ← **本番 URL を実測する**
 ```
+
+**`<project>.vercel.app` が自分のものとは限らない。** `transit-lens.vercel.app` は
+別人の既存プロジェクト(英語の交通分析サイト)が取得済みで、こちらには
+`transit-lens-one.vercel.app` が割り当てられた。デプロイ直後に本番 URL を
+`vercel alias ls` で実測し、README・フッタ・app-menu のすべてをその URL に揃える。
+**推測で書いた URL は 200 を返すので、開くまで気づけない。**
 
 **気をつけること**([[vercel-deploy-quirks]]):
 

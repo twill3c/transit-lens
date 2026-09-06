@@ -53,8 +53,11 @@ export function Scorecard() {
         <div className="k">陰性対照</div>
         <div className="v">{num(m.control_shuffled_auc, 3)}</div>
         <div className="n">
-          ラベルを無作為に入れ替えて同じ学習を回したときの AUC。0.5 付近に落ちなければ、
-          学習経路のどこかで答えが漏れている。
+          ラベルを無作為に入れ替えて同じ学習を回したときの AUC。
+          帰無は 0.5 ではない —— 同じ初期値の<b>未学習</b>モデルが{" "}
+          {num(m.untrained_baseline?.same_seed_as_runs, 4)}、初期値を 5 通り振ると{" "}
+          {num(m.untrained_baseline?.min, 3)}〜{num(m.untrained_baseline?.max, 3)} に散る。
+          対照はここに落ちるべきである。
         </div>
       </div>
       <div className="grade">
