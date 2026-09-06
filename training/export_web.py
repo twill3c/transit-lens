@@ -341,6 +341,7 @@ def main() -> int:
         "control_shuffled_auc": extra.get("control_shuffled_auc", float("nan")),
         "onnx_max_abs_diff": extra.get("onnx_max_abs_diff", float("nan")),
         "untrained_baseline": extra.get("untrained_baseline", {}),
+        "control_separation": extra.get("control_separation", {}),
         "eyeballs": extra.get("eyeballs", {}),
         "reference": REFERENCE,
     }

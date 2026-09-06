@@ -88,6 +88,41 @@ def check_onnx(model_dir: pathlib.Path, tag: str, gview: np.ndarray, lview: np.n
     return float(np.max(np.abs(torch_p - onnx_p)))
 
 
+# ------------------------------------------------------ G-04 の物差しの作り直し
+
+
+def class_separation(model_dir: pathlib.Path) -> dict:
+    """陰性対照と本モデルの「クラスの離れ具合」を、出力そのもので測る.
+
+    **AUC は退化した予測器に対して意味を持たない。** 実測(2026-09-06)では、
+    ラベルを入れ替えて学習したモデルの出力は**ほぼ定数**になり
+    (平均 0.2197 = 学習集合の正例率 0.2256 とほぼ同じ、標準偏差 0.00177)、
+    その微小な揺らぎが MES と順位相関 +0.60 を持つ。DR24 では MES の高い側は
+    深い食連星が占めるので、AUC は 0.117 まで下がる —— **ラベルを一切学んでいないのに、
+    AUC は 0.5 から大きく離れる。**
+
+    だから G-04 は AUC ではなく、**正例と負例の出力平均の差を出力の標準偏差で割った量**で
+    見る。これは定数予測器に対して素直に 0 に近づく。
+    """
+    out: dict = {}
+    for key, tag in (("real", "cam"), ("shuffled", "cam_shuffled")):
+        path = model_dir / f"{tag}_scores.npz"
+        if not path.exists():
+            continue
+        with np.load(path, allow_pickle=False) as z:
+            s, y = z["score"].astype(np.float64), z["label"]
+        sd = float(s.std())
+        mp, mn = float(s[y == 1].mean()), float(s[y == 0].mean())
+        out[key] = {
+            "mean_positive": mp,
+            "mean_negative": mn,
+            "score_sd": sd,
+            "separation_sd": (mp - mn) / sd if sd > 0 else 0.0,
+            "n": int(s.size),
+        }
+    return out
+
+
 # --------------------------------------------------------------- 目玉 1
 
 
@@ -312,6 +347,18 @@ def main() -> int:
     if shuffled.exists():
         out["control_shuffled_auc"] = json.loads(shuffled.read_text(encoding="utf-8"))["test"]["auc"]
         print(f"G-04 陰性対照 AUC: {out['control_shuffled_auc']:.4f}")
+        out["control_separation"] = class_separation(models)
+        cs = out["control_separation"]
+        print(
+            "G-04 クラス分離: 対照 {:.3f} SD(正例 {:.4f} / 負例 {:.4f}・出力の標準偏差 {:.5f})"
+            " / 本モデル {:.3f} SD".format(
+                cs["shuffled"]["separation_sd"],
+                cs["shuffled"]["mean_positive"],
+                cs["shuffled"]["mean_negative"],
+                cs["shuffled"]["score_sd"],
+                cs["real"]["separation_sd"],
+            )
+        )
 
     # G-06 二実装照合
     if (models / f"{args.tag}.onnx").exists():

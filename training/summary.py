@@ -85,7 +85,23 @@ def main() -> int:
             h = m["heads"]
             print(f"  G-05 頭部: cam {h['cam']:.4f} / astronet {h['astronet']:.4f} / 差 {h['delta']:+.4f} → {h['chosen']}")
         if "control_shuffled_auc" in m:
-            print(f"  G-04 陰性対照 AUC: {m['control_shuffled_auc']:.4f}(基準 0.55 未満)")
+            print(f"  G-04 陰性対照 AUC: {m['control_shuffled_auc']:.4f}(**AUC は物差しとして不適**)")
+        if "control_separation" in m:
+            cs = m["control_separation"]
+            for key, label in (("shuffled", "陰性対照"), ("real", "本モデル")):
+                if key in cs:
+                    v = cs[key]
+                    print(
+                        f"  G-04 クラス分離 {label}: {v['separation_sd']:.3f} SD"
+                        f"(正例 {v['mean_positive']:.4f} / 負例 {v['mean_negative']:.4f}"
+                        f" / 出力の標準偏差 {v['score_sd']:.5f})"
+                    )
+        if "untrained_baseline" in m:
+            u = m["untrained_baseline"]
+            print(
+                f"  未学習の基準線: 同じ初期値 {u.get('same_seed_as_runs', float('nan')):.4f} / "
+                f"5 通りで {u['min']:.4f}〜{u['max']:.4f}"
+            )
         if "onnx_max_abs_diff" in m:
             print(f"  G-06 二実装照合 最大絶対差: {m['onnx_max_abs_diff']:.3e}(基準 1e-5 未満)")
         eye = m.get("eyeballs", {})
@@ -96,11 +112,25 @@ def main() -> int:
                 print(f"      周期 {c['period']:5.1f} 日 / ばらつき {c['sigma'] * 1e6:4.0f} ppm → {c['crossing_mes']}")
         if "gaze" in eye:
             g = eye["gaze"]
-            print(
-                f"  目玉 2 視線: 通過窓内の比率 平均 {g['mean_in_window_positive']} / "
-                f"対照 {g['mean_in_window_control']} / 無情報の基準 {g['uninformative_baseline']:.3f} / "
-                f"対照を上回った割合 {g['fraction_above_control']}(n={g['n_positive_called']})"
-            )
+            print(f"  目玉 2 視線(無情報の基準 {g['uninformative_baseline']:.3f}・n={g['n_positive_called']})")
+            for key, label in (("registered", "登録した物差し"), ("posthoc", "事後の物差し(参考)")):
+                if key in g:
+                    v = g[key]
+                    print(
+                        f"      {label}: 窓内 平均 {v['mean_in_window']:.3f} / 中央値 "
+                        f"{v['median_in_window']:.3f} / 対照 {v['mean_control']:.3f} / "
+                        f"対照超 {v['fraction_above_control']:.3f}"
+                    )
+            if "branch_contribution" in g:
+                b = g["branch_contribution"]
+                print(
+                    "      枝の寄与: 正例 global {:+.2f} / local {:+.2f}  |  負例 global {:+.2f} / local {:+.2f}".format(
+                        b["positive_called"]["global"],
+                        b["positive_called"]["local"],
+                        b["negative_called"]["global"],
+                        b["negative_called"]["local"],
+                    )
+                )
     return 0
 
 

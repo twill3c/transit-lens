@@ -50,14 +50,22 @@ export function Scorecard() {
         </div>
       </div>
       <div className="grade">
-        <div className="k">陰性対照</div>
-        <div className="v">{num(m.control_shuffled_auc, 3)}</div>
+        <div className="k">陰性対照(クラス分離)</div>
+        <div className="v">
+          {num(m.control_separation?.shuffled?.separation_sd, 3)}
+          <span style={{ fontSize: "15px", color: "var(--ink-3)" }}> SD</span>
+        </div>
         <div className="n">
-          ラベルを無作為に入れ替えて同じ学習を回したときの AUC。
-          帰無は 0.5 ではない —— 同じ初期値の<b>未学習</b>モデルが{" "}
-          {num(m.untrained_baseline?.same_seed_as_runs, 4)}、初期値を 5 通り振ると{" "}
-          {num(m.untrained_baseline?.min, 3)}〜{num(m.untrained_baseline?.max, 3)} に散る。
-          対照はここに落ちるべきである。
+          ラベルを無作為に入れ替えて同じ学習を回すと、出力は<b>ほぼ定数</b>になる
+          (正例 {num(m.control_separation?.shuffled?.mean_positive, 4)} / 負例{" "}
+          {num(m.control_separation?.shuffled?.mean_negative, 4)})。
+          同じ量を本モデルで測ると{" "}
+          <b>{num(m.control_separation?.real?.separation_sd, 3)} SD</b>。答えは漏れていない。
+          <br />
+          <b>AUC では測れない</b> —— 定数に近い出力でも順位は付くので、
+          対照の AUC は {num(m.control_shuffled_auc, 3)} になる。
+          未学習のモデルですら初期値次第で {num(m.untrained_baseline?.min, 2)}〜
+          {num(m.untrained_baseline?.max, 2)} に散る。
         </div>
       </div>
       <div className="grade">

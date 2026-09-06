@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T05:42:27+00:00",
+  "generated_at": "2026-09-06T06:20:30+00:00",
   "model": {
     "head": "cam",
     "width": 0.5,
@@ -25,11 +25,11 @@
   },
   "heads": {
     "cam": 0.9678608591031769,
-    "astronet": null,
-    "delta": null,
+    "astronet": 0.9681921275973077,
+    "delta": 0.0003312684941307875,
     "chosen": "cam"
   },
-  "control_shuffled_auc": null,
+  "control_shuffled_auc": 0.5621270689038468,
   "onnx_max_abs_diff": 2.980232238769531e-07,
   "untrained_baseline": {
     "aucs": [
@@ -45,6 +45,22 @@
     "note": "同じ構造・同じ入力で、学習を一度もしていないモデルの試験 AUC。乱数の初期値だけで並べ替えの能力がどれだけ出るかの基準線。陰性対照はここに落ちるべきで、0.5 に落ちるとは限らない",
     "same_seed_as_runs": 0.4676931925340617,
     "seed": 20260905
+  },
+  "control_separation": {
+    "real": {
+      "mean_positive": 0.7070926520470904,
+      "mean_negative": 0.05956752274799965,
+      "score_sd": 0.3398573929937712,
+      "separation_sd": 1.90528481253594,
+      "n": 1614
+    },
+    "shuffled": {
+      "mean_positive": 0.21985910412873708,
+      "mean_negative": 0.21962135350625114,
+      "score_sd": 0.001771125824120876,
+      "separation_sd": 0.13423700295485425,
+      "n": 1614
+    }
   },
   "eyeballs": {
     "detection_limit": {

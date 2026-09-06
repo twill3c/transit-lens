@@ -30,6 +30,14 @@ export type DemoStar = {
   rawFlux: number[];
 };
 
+export type ClassSeparation = {
+  mean_positive: number;
+  mean_negative: number;
+  score_sd: number;
+  separation_sd: number;
+  n: number;
+};
+
 export type Metrics = {
   generated_at: string;
   model: {
@@ -59,6 +67,14 @@ export type Metrics = {
    * 未学習モデルの試験 AUC(陰性対照の帰無)。
    * **乱数の初期値だけで 0.72 が出る**ので、陰性対照の合否を 0.5 との近さでは決められない。
    */
+  /**
+   * G-04 の物差し —— 正例と負例の出力平均の差 ÷ 出力の標準偏差(SD 単位)。
+   * **AUC は定数に近い予測器に対して意味を持たない**ので、こちらで判定する。
+   */
+  control_separation?: {
+    real?: ClassSeparation;
+    shuffled?: ClassSeparation;
+  };
   untrained_baseline?: {
     aucs: number[];
     mean: number;
