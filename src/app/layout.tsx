@@ -14,7 +14,7 @@ const FOOTER = {
   license: "https://github.com/twill3c/transit-lens/blob/main/LICENSE",
   repository: "https://github.com/twill3c/transit-lens",
   guide: "https://claude.ai/code/artifact/0dea8755-3f45-4b50-8015-ba47f48d25e6",
-  blueprint: "https://claude.ai/code/artifact/BLUEPRINT_ID",
+  blueprint: "https://claude.ai/code/artifact/11b990cb-f1ad-4f36-9f5d-f4f53820c7ed",
   appMenu: "https://app-menu-amber.vercel.app/",
 };
 

@@ -214,6 +214,49 @@ check(
   footer,
 );
 
+// ---- T-204 スマホ幅 ----------------------------------------------------------
+// **「スマホ対応」と名乗る前に測る。** 幅 390px で開いたとき、見出しが
+// 1 文字ずつ縦に潰れていた(`.io` が nowrap で幅を譲らず、日本語はどこでも
+// 折り返せるので flex の内容最小幅が 1 文字になる)。検査はすべて緑だった
+const mobile = await browser.newPage({
+  viewport: { width: 390, height: 844 },
+  deviceScaleFactor: 2,
+  isMobile: true,
+  hasTouch: true,
+});
+await mobile.goto(`${base}/`, { waitUntil: "networkidle" });
+await mobile.locator(".card").first().waitFor({ timeout: 60_000 }).catch(() => {});
+
+const boxes = await mobile.locator(".step-head h2").evaluateAll((els) =>
+  els.map((e) => {
+    const r = e.getBoundingClientRect();
+    return { t: (e.textContent ?? "").trim(), w: Math.round(r.width), h: Math.round(r.height) };
+  }),
+);
+// 見出しが縦に潰れていれば、高さが 3 行ぶん(約 90px)を超える
+const squashed = boxes.filter((b) => b.h > 90);
+check(
+  "T-204 スマホ幅で見出しが潰れない",
+  boxes.length > 0 && squashed.length === 0,
+  squashed.length ? squashed.map((b) => `${b.t}(${b.w}×${b.h})`).join(" / ") : `${boxes.length} 見出し`,
+);
+
+const overflow = await mobile.evaluate(() => ({
+  scroll: document.documentElement.scrollWidth,
+  client: document.documentElement.clientWidth,
+}));
+check(
+  "T-204 スマホ幅で横スクロールが出ない",
+  overflow.scroll <= overflow.client + 3,
+  `${overflow.scroll} / ${overflow.client}`,
+);
+
+await mobile.screenshot({ path: join(SHOT_DIR, "10-mobile-top.png") });
+await mobile.locator("#dRp").scrollIntoViewIfNeeded().catch(() => {});
+await mobile.waitForTimeout(1200);
+await mobile.screenshot({ path: join(SHOT_DIR, "11-mobile-sandbox.png") });
+await mobile.close();
+
 await browser.close();
 if (!REMOTE) server.close();
 

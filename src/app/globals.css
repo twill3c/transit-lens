@@ -183,6 +183,36 @@ h1 .en {
   max-width: 60em;
 }
 
+/* 狭い画面では、右端の説明(`.io`)を次の行へ落とす。
+   `.io` は white-space: nowrap なので幅を譲らず、見出しの h2 が
+   **1 文字ずつ縦に潰れる**。日本語はどこでも折り返せるので、
+   flex の「内容の最小幅」が 1 文字になってしまう ——
+   実機の幅 390px のスクリーンショットで発見した(検査はすべて緑だった)。 */
+@media (max-width: 760px) {
+  .step-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .step-head h2 {
+    flex: 1 1 auto;
+  }
+  .step-head .io {
+    margin-left: 0;
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+  .readout-top {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+  .rt-l {
+    flex: 1 1 100%;
+  }
+  .verdict {
+    margin-left: auto;
+  }
+}
+
 /* ---------- 1. ギャラリー ---------- */
 .gallery {
   display: grid;
