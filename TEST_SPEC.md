@@ -5,6 +5,9 @@
 ## 実行規約
 
 - Python 側: `.venv/Scripts/python.exe -m pytest -q`。マーカー: `unit` / `integration` / `validation`
+- **既定の `pytest -q` は `integration` を外している**(`pytest.ini` の `addopts`)。
+  中断と再開の検査は学習を 4 回起動するので、共有機では数分かかる。
+  **skip は緑ではない** —— 出荷前に `pytest -q -m integration` を別に走らせること
 - TypeScript 側: `npx vitest run`
 - フィクスチャ更新は専用コミット(`test: update fixtures`)で行い、理由をループログに記す
 - 解析解を期待する合成フィクスチャは、期待値の導出前提を**テスト内の assert で検算**し、
@@ -64,6 +67,8 @@
 | T-019 | F-06 | **ロジット = 視線の平均 + バイアス** | 恒等式なので許容は浮動小数の丸めだけ(< 1e-5) |
 | T-020 | G-05 | AstroNet 型の頭部の視線 | 0 を返す(出せないものに近似値を作らない) |
 | T-021 | G-06 | ONNX 書き出し | PyTorch との最大絶対差 < 1e-5・出力の形が (N,59) / (N,46) |
+| T-022 | F-03 | 完走した学習の再開点(`integration`) | 完走後に `<tag>_resume.pt` が残らない。残ると次回**黙って前回の続き**から始まる |
+| T-023 | F-03 | 中断した学習の再開(`integration`) | 再開点の epoch の次から始まり、history が引き継がれる(1..5 が揃う) |
 
 ### TypeScript(`vitest`)
 
