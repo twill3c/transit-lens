@@ -29,6 +29,25 @@ SPLIT_SEED = "20260905"
 SPLIT_FRACTIONS = (0.80, 0.10)  # train, val(残りが test)
 
 
+def raise_priority() -> None:
+    """自分の優先度を通常へ上げる(Windows).
+
+    schtasks から起動されたプロセスは **BelowNormal** で走る。他に重い処理が
+    あると 10 倍遅くなる(フリートの先例: yonmoku-narabe / HC-186)。
+    起動側では直せないので、走る側が自分で上げる。
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        NORMAL_PRIORITY_CLASS = 0x00000020
+        handle = ctypes.windll.kernel32.GetCurrentProcess()
+        ctypes.windll.kernel32.SetPriorityClass(handle, NORMAL_PRIORITY_CLASS)
+    except Exception:  # noqa: BLE001 — 上げられなくても学習は続ける
+        pass
+
+
 def star_split(kepid: int) -> str:
     """KIC から決定論的に train / val / test を決める.
 
@@ -141,6 +160,11 @@ def main() -> int:
     ap.add_argument("--shuffle-labels", action="store_true", help="陰性対照(G-04)")
     ap.add_argument("--tag", default="")
     ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="<tag>_resume.pt があればそこから続ける(毎 epoch 書いている)",
+    )
+    ap.add_argument(
         "--init-from",
         default="",
         help="この重みから学習を続ける。学習率を下げた二段目を回すときに使う。"
@@ -148,6 +172,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    raise_priority()
     if args.threads:
         torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
@@ -199,10 +224,30 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     tag = args.tag or (args.head + ("_shuffled" if args.shuffle_labels else ""))
     ckpt = out_dir / f"{tag}.pt"
-    history = []
+    resume_path = out_dir / f"{tag}_resume.pt"
+    history: list[dict] = []
+    start_epoch = 1
+
+    # **長い学習は中断される。** この機では背景ジョブがセッション終了で死に、
+    # schtasks 経由では venv の pythonw がランチャなのでプロセスツリーごと殺される。
+    # Windows の挙動と戦うより、**毎 epoch 再開点を書いて、落ちたら続きから**にする。
+    if args.resume and resume_path.exists():
+        state = torch.load(resume_path, weights_only=False)
+        model.load_state_dict(state["model"])
+        opt.load_state_dict(state["optimizer"])
+        history = state["history"]
+        best = state["best"]
+        start_epoch = state["epoch"] + 1
+        print(
+            f"{resume_path} から再開 — epoch {start_epoch} から / 既定の最良 "
+            f"AUC {best['auc']:.4f}(epoch {best['epoch']})",
+            flush=True,
+        )
+        if start_epoch > args.epochs:
+            print("再開点がすでに指定 epoch を超えている。学習は行わない", flush=True)
 
     n = g_tr.shape[0]
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         model.train()
         perm = torch.randperm(n)
         t0 = time.time()
@@ -228,6 +273,17 @@ def main() -> int:
         if val["auc"] > best["auc"]:
             best = {"auc": val["auc"], "epoch": epoch}
             torch.save(model.state_dict(), ckpt)
+        # 再開点は**毎 epoch** 書く。落ちても失うのは 1 epoch ぶんだけ
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "optimizer": opt.state_dict(),
+                "history": history,
+                "best": best,
+                "epoch": epoch,
+            },
+            resume_path,
+        )
 
     model.load_state_dict(torch.load(ckpt, weights_only=True))
     g_te, l_te, y_te = tensors["test"]
@@ -263,6 +319,10 @@ def main() -> int:
     )
     if not args.shuffle_labels:
         export_onnx(model, out_dir / f"{tag}.onnx")
+
+    # 完走したら再開点は捨てる。残しておくと、次に同じタグで回したとき
+    # **黙って前回の続きから始まる**(条件を変えたつもりが変わっていない)
+    resume_path.unlink(missing_ok=True)
 
     print(json.dumps({k: report[k] for k in ("val", "test", "best_epoch")}, ensure_ascii=False, indent=2))
     return 0
